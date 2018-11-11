@@ -103,19 +103,20 @@ unsigned long RFIDtagNumber = 0;      // Stores bytes 1 through 4 of a tag ID (u
 byte RFIDtagArray[5];                 // Stores the five individual bytes of a tag ID.
 
 // ********************CONSTANTS (SET UP LOGGING PARAMETERS HERE!!)*******************************
-const byte checkTime = 30;            // How long in milliseconds to check to see if a tag is present (Tag is only partially read during this time -- This is just a quick way of detirmining if a tag is present or not
+const byte checkTime = 30;            // How long in milliseconds to check to see if a tag is present (Tag is only partially read during this time -- This is just a quick way of determining if a tag is present or not
 const unsigned int pollTime1 = 200;   // How long in milliseconds to try to read a tag if a tag was initially detected (applies to both RF circuits, but that can be changed)
-const unsigned int delayTime = 8;     // Minimim time in seconds between recording the same tag twice in a row (only applies to data logging--other operations are unaffected)
-const unsigned long pauseTime = 500;  // CRITICAL - This determines how long in milliseconds to wait between reading attempts. Make this wait time as long as you can and still maintain functionality (more pauseTime = more power saved)
+const unsigned int delayTime = 3;     // Minimim time in seconds between recording the same tag twice in a row (only applies to data logging--other operations are unaffected)
+const unsigned long pauseTime = 2000;  // CRITICAL - This determines how long in milliseconds to wait between reading attempts. Make this wait time as long as you can and still maintain functionality (more pauseTime = more power saved)
 
-const byte slpH = 21;                            // When to go to sleep at night - hour
+const byte slpH = 24;                            // When to go to sleep at night - hour
 const byte slpM = 00;                            // When to go to sleep at night - minute
-const byte wakH = 07;                            // When to wake up in the morning - hour
+const byte wakH = 05;                            // When to wake up in the morning - hour
 const byte wakM = 00;                            // When to wake up in the morning - minute
 const byte slpInterval = 25;                     // How many seconds to sleep at a time, must be less than 1 min.
 const unsigned int onTime = 1000;                // how man MILLISECONDS to stay on between sleep intervals
 const unsigned int slpTime = slpH * 100 + slpM;  // Combined hours and minutes for sleep time
 const unsigned int wakTime = wakH * 100 + wakM;  // Combined hours and minutes for wake time
+unsigned int birdAtbox = 0;                      // Bird location relative to box entrance. 0 is away from box/leaving box. 1 is at box entrance. 2 is in box.
 
 /* The reader will output Serial data for a certain number of read cycles;
  * then it will start using a low power sleep mode during the pauseTime between read attempts.
@@ -283,6 +284,7 @@ void setup() {                    // This function sets everything up for loggin
   RFcircuit = 1;                            // Indicates that the reader should start with the primary RFID circuit
   serial.println("Scanning for tags...\n"); // message to user
 
+
 }                                           // end void setup
 
 // ******************************MAIN PROGRAM*******************************
@@ -290,6 +292,8 @@ void setup() {                    // This function sets everything up for loggin
 void loop() {  // This is the main function. It loops (repeats) forever.
   if (rtc.updateTime() == false) serial.print("RTC failed at beginning of loop "); // Updates the time variables from RTC
 
+//  antenna1Off();
+  
   showTime();
   unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes(); // combine hours and minutes into one variable
   if (curTime == slpTime) {                 // Designated go to sleep time
@@ -335,6 +339,9 @@ void loop() {  // This is the main function. It loops (repeats) forever.
       serial.print(" at ");                   // Message part 3
       showTime();                             // Message part 4: display the time
       flashLED();                             // Flash the LED briefly to indicate a tag read
+      serial.print("Bird at box = ");
+      serial.println(birdAtbox);
+      birdDirection();
       if((timeSeconds < pastTimeSeconds + delayTime) & tagNo == tagNo2 & pastCircuit == RFcircuit){ // if everything matches up, the read is a repeat - don't log it.
           serial.println("Repeat read - data not logged.");
       } else {
@@ -373,10 +380,9 @@ void loop() {  // This is the main function. It loops (repeats) forever.
     }
   }
 
-  RFcircuit == 1 ? RFcircuit = 2 : RFcircuit = 1;        // uncomment this line to alternate between active RF circuits.
-  // RFcircuit = 1;                                      // uncomment this line to keep the active RF circuit set to 1.
-
-
+//  RFcircuit == 1 ? RFcircuit = 2 : RFcircuit = 1;        // uncomment this line to alternate between active RF circuits.
+//  RFcircuit = 1;                                      // uncomment this line to keep the active RF circuit set to 1.
+  
 }// end void loop
 
 
@@ -597,7 +603,9 @@ void logRFID_To_SD(String timeString) {
     dataFile.print(",");                        // comma for data delineation
     dataFile.print(RFcircuit);                  // log which antenna was active
     dataFile.print(",");                        // comma for data delineation
-    dataFile.println(timeString);               // log the time
+    dataFile.print(timeString);               // log the time
+    dataFile.print(",");                      // comma for data delineation
+    dataFile.println(birdAtbox);                // log where the bird is relative to the box
     dataFile.close();                           // close the file
     serial.println("saved to SD card.");        // serial output message to user
   } // check dataFile is present
@@ -902,4 +910,19 @@ void ISR() {     // dummy routine - not really needed??
   // SLEEP_FLAG = false;
   // serial.print("EIC_ISR SLEEP_FLAG = ");
   // serial.println(SLEEP_FLAG);
+}
+
+void birdDirection() {
+        if (RFcircuit == 1 && birdAtbox == 0 && tagNo > 0){   //Also switches RFcircuits from 1 to 2
+        birdAtbox = 1; //bird is at box entrance
+        RFcircuit = 2;
+        } else if (RFcircuit == 2 && birdAtbox == 1 && tagNo > 0){
+          birdAtbox = 2; //bird is in box
+          RFcircuit = 1;
+          } else if (RFcircuit == 1 && birdAtbox == 2 && tagNo > 0){
+            birdAtbox = 0; //bird is out of box
+            RFcircuit = 1;
+            } else {
+              RFcircuit = 2;
+              }
 }
