@@ -379,7 +379,7 @@ void loop() {  // This is the main function. It loops (repeats) forever.
       SD.begin(SDselect);
     }
   }
-
+//  get rid of subroutine, after bird is 1 then turn on line below and then add either for statement for bird is 2 or add counter for determining how long bird is in box
 //  RFcircuit == 1 ? RFcircuit = 2 : RFcircuit = 1;        // uncomment this line to alternate between active RF circuits.
 //  RFcircuit = 1;                                      // uncomment this line to keep the active RF circuit set to 1.
   
