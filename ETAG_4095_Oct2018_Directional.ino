@@ -106,7 +106,7 @@ byte RFIDtagArray[5];                 // Stores the five individual bytes of a t
 const byte checkTime = 30;            // How long in milliseconds to check to see if a tag is present (Tag is only partially read during this time -- This is just a quick way of determining if a tag is present or not
 const unsigned int pollTime1 = 200;   // How long in milliseconds to try to read a tag if a tag was initially detected (applies to both RF circuits, but that can be changed)
 const unsigned int delayTime = 3;     // Minimim time in seconds between recording the same tag twice in a row (only applies to data logging--other operations are unaffected)
-const unsigned long pauseTime = 2000;  // CRITICAL - This determines how long in milliseconds to wait between reading attempts. Make this wait time as long as you can and still maintain functionality (more pauseTime = more power saved)
+const unsigned long pauseTime = 1000;  // CRITICAL - This determines how long in milliseconds to wait between reading attempts. Make this wait time as long as you can and still maintain functionality (more pauseTime = more power saved)
 
 const byte slpH = 24;                            // When to go to sleep at night - hour
 const byte slpM = 00;                            // When to go to sleep at night - minute
@@ -116,7 +116,12 @@ const byte slpInterval = 25;                     // How many seconds to sleep at
 const unsigned int onTime = 1000;                // how man MILLISECONDS to stay on between sleep intervals
 const unsigned int slpTime = slpH * 100 + slpM;  // Combined hours and minutes for sleep time
 const unsigned int wakTime = wakH * 100 + wakM;  // Combined hours and minutes for wake time
-unsigned int birdAtbox = 0;                      // Bird location relative to box entrance. 0 is away from box/leaving box. 1 is at box entrance. 2 is in box.
+int birdAtbox = 0;                      // Bird location relative to box entrance. 0 is away from box/leaving box. 1 is at box entrance. 2 is in box.
+int birdAtbox2;
+const unsigned int wakeUpTime = wakH * 100 + 29;
+const unsigned int startTime = wakH * 100 + 30; //Start time is in minutes. 5*60 + 30 = 330
+const unsigned int endTime = (slpH-02) + slpM; //End time is in seconds now. 11*60 + 30 = 690
+
 
 /* The reader will output Serial data for a certain number of read cycles;
  * then it will start using a low power sleep mode during the pauseTime between read attempts.
@@ -138,6 +143,21 @@ void writeFlashAddr(unsigned long fAddress);
 void setClk();
 void dumpMem();
 void printDirectory(File dir, int numTabs);
+
+//Set up Serial MP3 Variables
+byte selectDevice[5] = {0x7E,0x03,0x35,0x01,0xEF};
+byte playDevice[4] = {0x7E,0x02,0x01,0xEF};
+byte playLoop[5] = {0x7E,0x03,0x33,0x00,0xEF};
+byte play1stsong[8] = {0x7E,0xFF,0x06,0x0F,0x00,0x01,0x01,0xEF};
+byte playStop[4] = {0x7E,0x02,0x0E,0xEF};
+byte playPaused[4] = {0x7E,0x02,0x02,0xEF};
+byte setVolumeLow[5] = {0x7E,0x03,0x31,0x08,0xEF}; //sets volume to 8
+byte setVolumeHigh[5] = {0x7E,0x03,0x31,0x1E,0xEF}; //sets volume to 30
+byte playReset[5] = {0x7E,0x03,0x35,0x05,0xEF};
+byte playSleep[5] = {0x7E,0x03,0x35,0x03,0xEF};
+byte wakeUpPlay[5] = {0x7E,0x03,0x35,0x02,0xEF};
+unsigned int play = 0;
+unsigned int birdIn = 0;
 
 // *******************************SETUP**************************************
 void setup() {                    // This function sets everything up for logging.
@@ -285,6 +305,13 @@ void setup() {                    // This function sets everything up for loggin
   serial.println("Scanning for tags...\n"); // message to user
 
 
+  Serial1.begin(9600);
+//  Serial1.write(wakeUpPlay, 5);
+//  delay(500);
+  Serial1.write(selectDevice, 5);
+  Serial1.write(setVolumeLow, 5);
+  delay(500);
+
 }                                           // end void setup
 
 // ******************************MAIN PROGRAM*******************************
@@ -320,6 +347,9 @@ void loop() {  // This is the main function. It loops (repeats) forever.
     serial.println(RFcircuit);              // Message part 2: show the active RF circuit
   // }
 
+//    noiseOn();
+//    noiseOff();
+    
     // Attempt tag read
     if (FastRead(DEMOD_OUT_PIN, RFcircuit, checkTime, pollTime1) == 1) {
 
@@ -338,10 +368,44 @@ void loop() {  // This is the main function. It loops (repeats) forever.
       serial.print(RFcircuit);                // Message part 2: Which antenna
       serial.print(" at ");                   // Message part 3
       showTime();                             // Message part 4: display the time
+      if (birdAtbox == 0){
+        birdAtbox = 10;
+        serial.print("Bird at box is ");
+        serial.println(birdAtbox);
+        } else if (RFcircuit == 1 && birdAtbox <= 10){
+            birdAtbox = birdAtbox-1;
+            serial.print("Bird at box is ");
+            serial.println(birdAtbox);
+          } else if (RFcircuit == 2 && 0 < birdAtbox <= 10){
+            birdAtbox = 20;
+            serial.print("Bird at box is ");
+            serial.println(birdAtbox);
+            } else if (RFcircuit == 2 && birdAtbox >= 20){
+              birdAtbox = birdAtbox+1;
+              serial.print("Bird at box is ");
+              serial.println(birdAtbox);
+//              } else if (RFcircuit == 2 && birdAtbox == 0){
+//                birdAtbox = -10;
+//                serial.print("Bird at box is ");
+//                serial.println(birdAtbox);
+                } else if (RFcircuit == 1 && birdAtbox == 20){
+                  birdAtbox = 0;
+                  RFcircuit = 1;
+                  serial.print("Bird at box is ");
+                  serial.println(birdAtbox);
+              }
+
+//      serial.print("Bird at box = ");         // Message part 5: display birdAtbox variable to determine bird location
+//      serial.println(birdAtbox2);
       flashLED();                             // Flash the LED briefly to indicate a tag read
-      serial.print("Bird at box = ");
-      serial.println(birdAtbox);
-      birdDirection();
+      int audioPin = 3;
+      pinMode(audioPin, OUTPUT);
+      digitalWrite(audioPin, LOW);
+      delay(1000);
+      
+//      birdDirection(); //needs to be out of tag read loop, need to see if you can switch to only rfcircuit 2
+//      noiseOn();
+//      noiseOff();
       if((timeSeconds < pastTimeSeconds + delayTime) & tagNo == tagNo2 & pastCircuit == RFcircuit){ // if everything matches up, the read is a repeat - don't log it.
           serial.println("Repeat read - data not logged.");
       } else {
@@ -379,9 +443,27 @@ void loop() {  // This is the main function. It loops (repeats) forever.
       SD.begin(SDselect);
     }
   }
-//  get rid of subroutine, after bird is 1 then turn on line below and then add either for statement for bird is 2 or add counter for determining how long bird is in box
-//  RFcircuit == 1 ? RFcircuit = 2 : RFcircuit = 1;        // uncomment this line to alternate between active RF circuits.
-//  RFcircuit = 1;                                      // uncomment this line to keep the active RF circuit set to 1.
+//    birdDirection(); //needs to be out of tag read loop, need to see if you can switch to only rfcircuit 2
+  if (birdAtbox > 0 && tagNo>0){ //birdAtbox <= 10 && tagNo>0 switches antennas
+      RFcircuit == 1 ? RFcircuit = 2 : RFcircuit = 1;        // uncomment this line to alternate between active RF circuits. This if statement will switch the RFcircuits from just 1 to alternating between 1 and 2
+
+//  } else if (RFcircuit == 1 && tagNo>0){
+//    birdAtbox =1;
+//    serial.print("Bird at box = ");
+//    serial.println(birdAtbox);
+//    } else if (birdAtbox == 1){
+//      birdAtbox2 = birdAtbox2-1;
+//      
+//      } else if (birdAtbox2 == -10){
+//        serial.print("Bird at box = ");
+//        serial.println(birdAtbox2);
+//        RFcircuit = 1;
+      
+//      } else if (RFcircuit == 1 && tagNo == tagNo2){ //this line for whatever reason starts the counter on RFcircuit1 even when no tags are scanned...
+//        birdAtbox = birdAtbox-1; // starting counter;
+//        serial.print("Bird at box is ");
+//        serial.println(birdAtbox);
+        }
   
 }// end void loop
 
@@ -912,17 +994,40 @@ void ISR() {     // dummy routine - not really needed??
   // serial.println(SLEEP_FLAG);
 }
 
-void birdDirection() {
-        if (RFcircuit == 1 && birdAtbox == 0 && tagNo > 0){   //Also switches RFcircuits from 1 to 2
-        birdAtbox = 1; //bird is at box entrance
-        RFcircuit = 2;
-        } else if (RFcircuit == 2 && birdAtbox == 1 && tagNo > 0){
-          birdAtbox = 2; //bird is in box
-          RFcircuit = 1;
-          } else if (RFcircuit == 1 && birdAtbox == 2 && tagNo > 0){
-            birdAtbox = 0; //bird is out of box
-            RFcircuit = 1;
-            } else {
-              RFcircuit = 2;
-              }
-}
+//void birdDirection() { //if birdDirection is inside scanning loop then the count only occurs when a tag is read. if birdDirection is outside the loop then count occurs during scanning process
+// unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes(); //need to use curTime to turn speaker on and off
+// int audioPin = 3;
+//  pinMode(audioPin, OUTPUT);
+//  if (curTime >= wakeUpTime){
+//       Serial1.write(wakeUpPlay, 5);
+//        } else if (curTime >= (startTime)){
+//          Serial1.write(playDevice, 4);
+//          } 
+//   if (RFcircuit == 1 && tagNo > 0 && birdAtbox == 10){   //bird is at box entrance
+//        RFcircuit == 1 ? RFcircuit = 2: RFcircuit = 1; //switching between antennas
+//        RFcircuit = 2; //switching to antenna 2
+//        
+//          } else if (RFcircuit == 2){
+//            birdAtbox = birdAtbox-1; // starting counter;
+//            serial.print("Bird at box is ");
+//            serial.println(birdAtbox);
+  
+//              } else if (RFcircuit == 2 && birdAtbox <= 0){
+//                birdAtbox = 10;
+//                RFcircuit = 1;
+//                serial.println("Bird is at box entrance");
+                
+//                    } else {
+//                      RFcircuit = 1;
+//                    }
+//  }
+
+//                } else if (RFcircuit == 1 && tagNo == tagNo2 && birdAtbox == 0){
+//                  RFcircuit = 1; 
+//                  birdAtbox = 10;
+//  
+//                    } else if (RFcircuit == 1 && birdAtbox == 10){
+//                      birdAtbox = birdAtbox - 1;
+//  
+//                      } else if (RFcircuit == 1 && birdAtbox == 0){
+//                        RFcircuit = 2;
