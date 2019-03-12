@@ -108,7 +108,7 @@ const unsigned int pollTime1 = 200;   // How long in milliseconds to try to read
 const unsigned int delayTime = 3;     // Minimim time in seconds between recording the same tag twice in a row (only applies to data logging--other operations are unaffected)
 const unsigned long pauseTime = 1000;  // CRITICAL - This determines how long in milliseconds to wait between reading attempts. Make this wait time as long as you can and still maintain functionality (more pauseTime = more power saved)
 
-const byte slpH = 24;                            // When to go to sleep at night - hour
+const byte slpH = 22;                            // When to go to sleep at night - hour
 const byte slpM = 00;                            // When to go to sleep at night - minute
 const byte wakH = 05;                            // When to wake up in the morning - hour
 const byte wakM = 00;                            // When to wake up in the morning - minute
@@ -118,10 +118,9 @@ const unsigned int slpTime = slpH * 100 + slpM;  // Combined hours and minutes f
 const unsigned int wakTime = wakH * 100 + wakM;  // Combined hours and minutes for wake time
 int birdAtbox = 0;                      // Bird location relative to box entrance. 0 is away from box/leaving box. 1 is at box entrance. 2 is in box.
 int birdAtbox2;
-const unsigned int wakeUpTime = wakH * 100 + 29;
-const unsigned int startTime = wakH * 100 + 30; //Start time is in minutes. 5*60 + 30 = 330
-const unsigned int endTime = (slpH-02) + slpM; //End time is in seconds now. 11*60 + 30 = 690
-
+const unsigned int wakeUpTime = wakH * 100 + 29; //Turning on Serial MP3 player from sleep
+const unsigned int startTime = (wakH) * 100 + 30; //Start time is in minutes. wakH * 100 + 30 = 0530
+const unsigned int endTime = (wakH + 06 )* 100 + 30; //End time is in minutes. (wakH + 05) * 100 + 30 = 1130
 
 /* The reader will output Serial data for a certain number of read cycles;
  * then it will start using a low power sleep mode during the pauseTime between read attempts.
@@ -158,6 +157,11 @@ byte playSleep[5] = {0x7E,0x03,0x35,0x03,0xEF};
 byte wakeUpPlay[5] = {0x7E,0x03,0x35,0x02,0xEF};
 unsigned int play = 0;
 unsigned int birdIn = 0;
+
+/*
+ * Setting up Camera Variables Here
+ */
+ int cameraTrig = 0;
 
 // *******************************SETUP**************************************
 void setup() {                    // This function sets everything up for logging.
@@ -304,13 +308,22 @@ void setup() {                    // This function sets everything up for loggin
   RFcircuit = 1;                            // Indicates that the reader should start with the primary RFID circuit
   serial.println("Scanning for tags...\n"); // message to user
 
-
+/*
+ * Setting serial communication with MP3 player
+ */
+ 
   Serial1.begin(9600);
 //  Serial1.write(wakeUpPlay, 5);
 //  delay(500);
   Serial1.write(selectDevice, 5);
   Serial1.write(setVolumeLow, 5);
   delay(500);
+
+/*
+ * Setting up camera variables
+ */
+  pinMode(cameraTrig, OUTPUT);
+  digitalWrite(cameraTrig, HIGH);
 
 }                                           // end void setup
 
@@ -320,6 +333,9 @@ void loop() {  // This is the main function. It loops (repeats) forever.
   if (rtc.updateTime() == false) serial.print("RTC failed at beginning of loop "); // Updates the time variables from RTC
 
 //  antenna1Off();
+
+    noiseOn();
+    noiseOff();
   
   showTime();
   unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes(); // combine hours and minutes into one variable
@@ -346,9 +362,6 @@ void loop() {  // This is the main function. It loops (repeats) forever.
     serial.print("Scanning RFID circuit "); // Message part 1: Tell the user which circuit is active
     serial.println(RFcircuit);              // Message part 2: show the active RF circuit
   // }
-
-//    noiseOn();
-//    noiseOff();
     
     // Attempt tag read
     if (FastRead(DEMOD_OUT_PIN, RFcircuit, checkTime, pollTime1) == 1) {
@@ -372,6 +385,7 @@ void loop() {  // This is the main function. It loops (repeats) forever.
         birdAtbox = 10;
         serial.print("Bird at box is ");
         serial.println(birdAtbox);
+        digitalWrite(cameraTrig, LOW);
         } else if (RFcircuit == 1 && birdAtbox <= 10){
             birdAtbox = birdAtbox-1;
             serial.print("Bird at box is ");
@@ -380,6 +394,7 @@ void loop() {  // This is the main function. It loops (repeats) forever.
             birdAtbox = 20;
             serial.print("Bird at box is ");
             serial.println(birdAtbox);
+//            Serial1.write(playStop,5);
             } else if (RFcircuit == 2 && birdAtbox >= 20){
               birdAtbox = birdAtbox+1;
               serial.print("Bird at box is ");
@@ -393,10 +408,8 @@ void loop() {  // This is the main function. It loops (repeats) forever.
                   RFcircuit = 1;
                   serial.print("Bird at box is ");
                   serial.println(birdAtbox);
+//                  Serial1.write(playDevice,4);
               }
-
-//      serial.print("Bird at box = ");         // Message part 5: display birdAtbox variable to determine bird location
-//      serial.println(birdAtbox2);
       flashLED();                             // Flash the LED briefly to indicate a tag read
       int audioPin = 3;
       pinMode(audioPin, OUTPUT);
@@ -994,40 +1007,25 @@ void ISR() {     // dummy routine - not really needed??
   // serial.println(SLEEP_FLAG);
 }
 
-//void birdDirection() { //if birdDirection is inside scanning loop then the count only occurs when a tag is read. if birdDirection is outside the loop then count occurs during scanning process
-// unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes(); //need to use curTime to turn speaker on and off
-// int audioPin = 3;
-//  pinMode(audioPin, OUTPUT);
-//  if (curTime >= wakeUpTime){
-//       Serial1.write(wakeUpPlay, 5);
-//        } else if (curTime >= (startTime)){
-//          Serial1.write(playDevice, 4);
-//          } 
-//   if (RFcircuit == 1 && tagNo > 0 && birdAtbox == 10){   //bird is at box entrance
-//        RFcircuit == 1 ? RFcircuit = 2: RFcircuit = 1; //switching between antennas
-//        RFcircuit = 2; //switching to antenna 2
-//        
-//          } else if (RFcircuit == 2){
-//            birdAtbox = birdAtbox-1; // starting counter;
-//            serial.print("Bird at box is ");
-//            serial.println(birdAtbox);
-  
-//              } else if (RFcircuit == 2 && birdAtbox <= 0){
-//                birdAtbox = 10;
-//                RFcircuit = 1;
-//                serial.println("Bird is at box entrance");
-                
-//                    } else {
-//                      RFcircuit = 1;
-//                    }
-//  }
-
-//                } else if (RFcircuit == 1 && tagNo == tagNo2 && birdAtbox == 0){
-//                  RFcircuit = 1; 
-//                  birdAtbox = 10;
-//  
-//                    } else if (RFcircuit == 1 && birdAtbox == 10){
-//                      birdAtbox = birdAtbox - 1;
-//  
-//                      } else if (RFcircuit == 1 && birdAtbox == 0){
-//                        RFcircuit = 2;
+void noiseOn(){
+    unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();
+      if (curTime == wakeUpTime){
+        Serial1.write(wakeUpPlay, 5);
+        serial.println("Serial MP3 Player Awake");
+    } else if (birdAtbox == 20 && curTime >= startTime){
+          Serial1.write(playStop, 4);
+          } else if (birdAtbox == 0 && curTime >= startTime){
+               Serial1.write(playDevice, 4);
+              }
+  }
+void noiseOff(){
+    unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();     
+    if (curTime >= endTime) {
+      Serial1.write(playStop, 4);
+      Serial1.write(playSleep, 5);
+      serial.println("Speaker Sleeping");
+//     } else if (birdIn == 0 && (hh*60)+mm >= endTime) {
+//        Serial1.write(playStop, 4);
+      
+    }
+ }
