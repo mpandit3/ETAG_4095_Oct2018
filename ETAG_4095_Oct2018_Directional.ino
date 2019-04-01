@@ -121,6 +121,8 @@ const unsigned int slpTime = slpH * 100 + slpM;  // Combined hours and minutes f
 const unsigned int wakTime = wakH * 100 + wakM;  // Combined hours and minutes for wake time
 int birdAtbox = 0;                      // Bird location relative to box entrance. 0 is away from box/leaving box. 1 is at box entrance. 2 is in box.
 int birdAtbox2 = 0;
+String birdID1 = "011016CDC2";
+String birdID2 = "01103F3A9E";
 const unsigned int wakeUpTime = wakH * 100 + 29; //Turning on Serial MP3 player from sleep
 const unsigned int startTime = (wakH) * 100 + 30; //Start time is in minutes. wakH * 100 + 30 = 0530
 const unsigned int endTime = (wakH + 06 )* 100 + 30; //End time is in minutes. (wakH + 05) * 100 + 30 = 1130
@@ -375,47 +377,53 @@ void loop() {  // This is the main function. It loops (repeats) forever.
       serial.print(RFcircuit);                // Message part 2: Which antenna
       serial.print(" at ");                   // Message part 3
       showTime();                             // Message part 4: display the time
-      if (birdAtbox == 0){
+      
+  if (RFIDstring == birdID1 && birdAtbox == 0 && RFcircuit == 1){
         birdAtbox = 10;
-        serial.print("Bird at box is ");
+        serial.print("Bird 1 at box is ");
         serial.println(birdAtbox);
-        } else if (RFcircuit == 1 && birdAtbox <= 10 && tagNo == tagNo2){
+        } else if (RFcircuit == 1 && birdAtbox <= 10 && RFIDstring == birdID1){
             birdAtbox = birdAtbox-1;
-            serial.println("Bird is at box entrance");
-            serial.print("Bird at box is ");
+            serial.println("Bird 1 is at box entrance");
+            serial.print("Bird 1 at box is ");
             serial.println(birdAtbox);
-          } else if (RFcircuit == 1 && tagNo != tagNo2 && birdAtbox2 == 0){
-            serial.println("New bird is at box entrance!");
-            birdAtbox2 = 10;
-            serial.print("Bird at box is ");
-            serial.println(birdAtbox2);
-          } else if (RFcircuit == 2 && 0 < birdAtbox <= 10 && tagNo == tagNo2){
-            birdAtbox = 20;
-            serial.println("Bird is still at box entrance");
-            serial.print("Bird at box is ");
-            serial.println(birdAtbox);
-            } else if (RFcircuit == 2 && birdAtbox == 20 && tagNo == tagNo2){
-              birdAtbox = birdAtbox+1;
-              serial.println("Bird is in box");
-              serial.print("Bird at box is ");
-              serial.println(birdAtbox);
-            } else if (RFcircuit == 2 && birdAtbox2 == 10 && tagNo != tagNo2){
-              serial.println("New bird is in the box");
-              birdAtbox2 = 20;
-              serial.println(birdAtbox2);
-                } else if (RFcircuit == 1 && birdAtbox >= 20 && tagNo == tagNo2){
+              } else if (RFcircuit == 2 && 0 < birdAtbox <= 10 && RFIDstring == birdID1){
+                birdAtbox = 20;
+                serial.println("Bird 1 is in box");
+                serial.print("Bird 1 at box is ");
+                serial.println(birdAtbox);
+                } else if (RFcircuit == 1 && birdAtbox == 20 && RFIDstring == birdID1){
                   birdAtbox = 0;
                   RFcircuit = 1;
-                  serial.println("Bird has left box");
-                  serial.print("Bird at box is ");
+                  serial.println("Bird 1 has left box");
+                  serial.print("Bird 1 at box is ");
                   serial.println(birdAtbox);
-                } else if (RFcircuit == 1 && birdAtbox2 >= 20 && tagNo != tagNo2){
-                  birdAtbox2 = 0;
-                  RFcircuit = 1;
-                  serial.println("Second bird has left box");
-                  serial.print("Bird at box is ");
-                  serial.println(birdAtbox2);
-                }
+                    } else if (RFcircuit == 1 && birdAtbox2 == 0 && RFIDstring == birdID2){
+                      serial.println("New bird is at box entrance!");
+                      birdAtbox2 = 10;
+                      serial.print("Bird 2 at box is ");
+                      serial.println(birdAtbox2);
+                      } else if (RFcircuit == 1 && birdAtbox2 <= 10 && RFIDstring == birdID2){
+                        birdAtbox2 = birdAtbox2-1;
+                        serial.println("Bird 2 is still at box entrance");
+                        serial.print("Bird 2 at box is ");
+                        serial.println(birdAtbox2);
+                      } else if (RFcircuit == 2 && 0 < birdAtbox2 <= 10 && RFIDstring == birdID2){
+                        birdAtbox2 = 20;
+                        serial.println("Bird 2 is in box");
+                        serial.print("Bird 2 at box is ");
+                        serial.println(birdAtbox);
+                      } else if (RFcircuit == 1 && birdAtbox2 == 20 && RFIDstring == birdID2){
+                        birdAtbox2 = 0;
+                        RFcircuit = 1;
+                        serial.println("Second bird has left box");
+                        serial.print("Bird 2 at box is ");
+                        serial.println(birdAtbox2);             
+                          } else if (RFcircuit == 1 && RFIDstring != birdID1 || RFIDstring != birdID2){
+                          String birdID3 = RFIDstring;
+                            serial.println("Unknown bird at box");
+                          }
+
       flashLED();                             // Flash the LED briefly to indicate a tag read
       int audioPin = 3;
       pinMode(audioPin, OUTPUT);
@@ -448,7 +456,7 @@ void loop() {  // This is the main function. It loops (repeats) forever.
     cycleCount++;
     delay(pauseTime);                  // pause between polling attempts
   } else {
-    byte pauseInterval = (1000 * 64)/1000;
+    byte pauseInterval = (4000 * 64)/1000;
     serial.print("pause interval: ");
     serial.println(pauseInterval, DEC);
     rtc.setRptTimer(pauseInterval, 1); // set timer and use frequency of 64 Hz
@@ -463,7 +471,7 @@ void loop() {  // This is the main function. It loops (repeats) forever.
     }
   }
 //    birdDirection(); //needs to be out of tag read loop, need to see if you can switch to only rfcircuit 2
-  if (birdAtbox > 0 && tagNo>0){ //birdAtbox <= 10 && tagNo>0 switches antennas
+  if (birdAtbox > 0 || birdAtbox2 > 0 && tagNo>0){ //birdAtbox <= 10 && tagNo>0 switches antennas
       RFcircuit == 1 ? RFcircuit = 2 : RFcircuit = 1;        // uncomment this line to alternate between active RF circuits. This if statement will switch the RFcircuits from just 1 to alternating between 1 and 2
 
 //  } else if (RFcircuit == 1 && tagNo>0){
