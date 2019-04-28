@@ -969,7 +969,7 @@ void noiseOn(){
       if (curTime == wakeUpTime){
         Serial1.write(wakeUpPlay, 5);
         m++;
-        if (m == 60){
+        if (m == 100){
         serial.println("Serial MP3 Player Awake");
         saveLogSD("MP3 Player Turned On");        
         m = 0;
@@ -998,7 +998,7 @@ void noiseOn(){
               saveLogSD("Noise Stopped");
               s = 0;
               }       
-          } else if (birdAtbox <= 10 && birdAtbox2 <=10 && curTime >= startTime){
+          } else if (birdAtbox <= 10 && birdAtbox2 <=10 && curTime >= startTime && curTime < endTime){
               Serial1.write(playDevice, 4);
               p++;
               if (p == 30){
@@ -1006,32 +1006,29 @@ void noiseOn(){
               saveLogSD("Noise playing");
               p = 0;
               }
+          } else if (birdAtbox <= 10 && birdAtbox2 <=10 && curTime >= endTime && curTime > startTime){
+              p++;
+              if (p == 30){
+              serial.println("Noise off");
+              saveLogSD("Noise off");
+              p = 0;
               }
-//if (tagNo > 0 && birdAtbox == 20 && curTime >= startTime){
-//              serial.println("Noise stopped");
-//              saveLogSD("Noise Stopped");
-//      } else if (tagNo > 0 && birdAtbox2 == 20 && curTime >= startTime){
-//              serial.println("Noise stopped");
-////              Serial1.write(playStop, 4);
-//              saveLogSD("Noise Stopped");
-//      } else if (tagNo > 0 && birdAtbox <= 10 && birdAtbox2 <=10 && curTime >= startTime){
-//               serial.println("Noise playing");
-////               Serial1.write(playDevice, 4);
-//               saveLogSD("Noise Playing");
-//              }
-  }
+          }
+
+  } //end of noiseOn subroutine
+  
 void noiseOff(){
     unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();     
-    if (curTime == endTime) {
+    if (curTime >= endTime) {
       Serial1.write(playStop, 4);
       Serial1.write(playSleep, 5);
           e++;
-          if (e == 1200){
-          serial.println("Noise stopped");
-          saveLogSD("Noise Stopped");
+          if (e == 72000){
+//          serial.println("MP3 Player Sleeping");
+          saveLogSD("MP3 Player Sleeping");
           e = 0;
           }
-      saveLogSD("Speaker Sleeping");
+//      saveLogSD("Speaker Sleeping");
 //      serial.println("Speaker Sleeping");
 //     } else if (birdIn == 0 && (hh*60)+mm >= endTime) {
 //        Serial1.write(playStop, 4);
