@@ -109,7 +109,7 @@ byte RFIDtagArray[5];                 // Stores the five individual bytes of a t
 // ********************CONSTANTS (SET UP LOGGING PARAMETERS HERE!!)*******************************
 const byte checkTime = 30;            // How long in milliseconds to check to see if a tag is present (Tag is only partially read during this time -- This is just a quick way of determining if a tag is present or not. Coil is energized, checks for specific pulse lengths
 const unsigned int pollTime1 = 200;   // How long in milliseconds to try to read a tag if a tag was initially detected (applies to both RF circuits, but that can be changed)
-const unsigned int delayTime = 0.230;     // Minimim time in seconds between recording the same tag twice in a row (only applies to data logging--other operations are unaffected)
+const unsigned int delayTime = 0;     // Minimim time in seconds between recording the same tag twice in a row (only applies to data logging--other operations are unaffected)
 const unsigned long pauseTime = 100;  // CRITICAL - This determines how long in milliseconds to wait between reading attempts. Make this wait time as long as you can and still maintain functionality (more pauseTime = more power saved)
 
 const byte slpH = 22;                            // When to go to sleep at night - hour
@@ -138,7 +138,7 @@ const unsigned int endTime = (wakH + 06 )* 100 + 30; //End time is in minutes. (
  */
 
 unsigned int cycleCount = 0;                     // counts read cycles
-unsigned int stopCycleCount = 100;                // How many read cycles to maintain serial comminications
+unsigned int stopCycleCount = 200;                // How many read cycles to maintain serial comminications
 
 byte SDpresent;                                  // 1 if SD card is detected on startup.
 byte doorState = 1;                              // Status of the motorized door. 0 = open, 1 = closed.
@@ -166,6 +166,8 @@ unsigned int play = 0;
 unsigned int birdIn = 0;
 
 //Speaker Counting variables
+String noiseState[]{"Noise On", "Noise Off"};
+String noiseStatus;
 int m = 0;
 int p = 0;
 int s = 0;
@@ -412,13 +414,13 @@ void loop() {  // This is the main function. It loops (repeats) forever.
     cycleCount++;
     delay(pauseTime);                  // pause between polling attempts
   } else {
-    byte pauseInterval = (pauseTime * 64)/1000;
+    int pauseInterval = 10;            //tells the board when to wake up during the pseudosleep mode (serial communication cut off)
     serial.print("pause interval: ");
     serial.println(pauseInterval, DEC);
     rtc.setRptTimer(pauseInterval, 1); // set timer and use frequency of 64 Hz
     pinMode(SDselect, INPUT);          // make the SD card pin an input so it can serve as interrupt pin
     rtc.startTimer();                  // start the timer
-//    lpSleep();                         // call sleep funciton
+    lpSleep();                         // call sleep funciton
     // blipLED(30);                    // blink indicator - processor reawakened
     rtc.stopTimer();
     if(SDpresent == 1){
@@ -484,7 +486,7 @@ byte FastRead(int demodOutPin, byte whichCircuit, byte checkDelay, unsigned int 
     return (1);
   } else {
     serial.print("parity fail... ");
-    saveLogSD("Parity fail at  ");
+//    saveLogSD("Parity fail at  ");
 //    saveLogSD(timeString);               // log the time    
     return (0);
   }
@@ -657,7 +659,10 @@ void logRFID_To_SD(String timeString) {
     dataFile.print(",");                      // comma for data delineation
     dataFile.print(birdAtbox);                // log where the bird is relative to the box
     dataFile.print(",");                      // comma for data delineation
-    dataFile.println(birdAtbox2);                // log where the bird is relative to the box
+    dataFile.print(birdAtbox2);                // log where the bird is relative to the box
+    dataFile.print(",");                      // comma for data delineation
+    dataFile.println(noiseStatus);
+
 
     dataFile.close();                           // close the file
     serial.println("saved to SD card.");        // serial output message to user
@@ -974,45 +979,19 @@ void noiseOn(){
         saveLogSD("MP3 Player Turned On");        
         m = 0;
         }
-        } else if (birdAtbox == 20 && curTime >= startTime){
+        } else if (birdAtbox == 20 && curTime >= startTime && curTime <=endTime){
               Serial1.write(playStop, 4);
-              s++;
-              if (s == 30){
-              serial.println("Noise stopped");
-              saveLogSD("Noise Stopped");
-              s = 0;
-              }
-        } else if (birdAtbox2 == 20 && curTime >= startTime){
+              noiseStatus = noiseState[1];
+        } else if (birdAtbox2 == 20 && curTime >= startTime && curTime <=endTime){
               Serial1.write(playStop, 4);
-              s++;
-              if (s == 30){
-              serial.println("Noise stopped");
-              saveLogSD("Noise Stopped");
-              s = 0;
-              }
-        } else if (birdAtbox == 20 && birdAtbox2 == 20 && curTime >= startTime){
-//              Serial1.write(playStop, 4);
-              s++;
-              if (s == 30){
-              serial.println("Noise stopped");
-              saveLogSD("Noise Stopped");
-              s = 0;
-              }       
+              noiseStatus = noiseState[1];
+        } else if (birdAtbox == 20 && birdAtbox2 == 20 && curTime >= startTime && curTime <=endTime){
+              Serial1.write(playStop, 4);
+              noiseStatus = noiseState[1];              
           } else if (birdAtbox <= 10 && birdAtbox2 <=10 && curTime >= startTime && curTime < endTime){
               Serial1.write(playDevice, 4);
-              p++;
-              if (p == 30){
-              serial.println("Noise playing");
-              saveLogSD("Noise playing");
-              p = 0;
-              }
-          } else if (birdAtbox <= 10 && birdAtbox2 <=10 && curTime >= endTime && curTime > startTime){
-              p++;
-              if (p == 30){
-              serial.println("Noise off");
-              saveLogSD("Noise off");
-              p = 0;
-              }
+              noiseStatus = noiseState[0];              
+          
           }
 
   } //end of noiseOn subroutine
@@ -1022,6 +1001,8 @@ void noiseOff(){
     if (curTime >= endTime) {
       Serial1.write(playStop, 4);
       Serial1.write(playSleep, 5);
+      noiseStatus = noiseState[1];
+
           e++;
           if (e == 72000){
 //          serial.println("MP3 Player Sleeping");
@@ -1057,6 +1038,7 @@ void birdDirection(){
             serial.println("Bird 1 is at box entrance");
             serial.print("Bird 1 at box is ");
             serial.println(birdAtbox);
+            saveLogSD("Noise playing");
               } else if (RFcircuit == 2 && 0 < birdAtbox <= 10 && RFIDtagNumber == birdID[0]){
                 birdAtbox = 20;
                 serial.println("Bird 1 is in box");
@@ -1089,12 +1071,12 @@ void birdDirection(){
                         RFcircuit = 1;
                         serial.println("Second bird has left box");
                         serial.print("Bird 2 at box is ");
-                        serial.println(birdAtbox2);             
+                        serial.println(birdAtbox2);    
                           } else if (RFcircuit == 1 && RFIDtagNumber == birdID[2]){
 //                            birdID[2] = RFIDtagNumber;
                             serial.println("Unknown bird at box entrance");
                           } else if (RFcircuit == 2 && RFIDtagNumber == birdID[2]){
-                            serial.println("Unknown bird in box");                            
+                            serial.println("Unknown bird in box");
 //                          } else if (RFcircuit == 1 && RFIDstring != birdID[0] && RFIDstring != birdID[1] && RFIDstring != birdID[2] && RFIDstring != birdID[4]){
 //                            birdID[3] = RFIDstring;
 //                            serial.println("Unknown bird 2 at box");
