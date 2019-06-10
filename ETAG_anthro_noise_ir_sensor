@@ -37,7 +37,7 @@
 
 
 #define serial SerialUSB     // Designate the USB connection as the primary serial comm port
-#define DHTPIN 3     // Digital pin connected to the DHT sensor
+//#define DHTPIN 3     // Digital pin connected to the DHT sensor
 #define DEMOD_OUT_PIN   30   // (PB03) this is the target pin for the raw RFID data
 #define SHD_PINA         8   // (PA06) Setting this pin high activates the primary RFID circuit (only one can be active at a time)
 #define SHD_PINB         9   // (PA07) Setting this pin high activates the seconday RFID circuit (only one can be active at a time)
@@ -53,7 +53,8 @@
 #define mStby           3    // motor controller standby
 #define mSwitch         4    // motor switch
 #define INT1            7
-#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
+//#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
+#define irSensor        4
 
 // ManchesterDecoder gManDecoder1(DEMOD_OUT_PIN, SHD_PINA, ManchesterDecoder::EM4095, CollectedBitMinCount);
 // ManchesterDecoder gManDecoder2(DEMOD_OUT_PIN, SHD_PINB, ManchesterDecoder::EM4095, CollectedBitMinCount);
@@ -78,6 +79,7 @@ union flashMem {                      // Union variable for constructing instruc
 
 byte match;                           // used to determine if tags match.
 byte RFcircuit = 1;                   // Used to determine which RFID circuit is active. 1 = primary circuit, 2 = secondary circuit.
+byte RFcircuitCnt = 1;                // Counts consecutive cycles for circuit 1
 byte pastCircuit;                     // Used to keep track of where (which RF circuit) a tag was last read
 byte ss, mm, hh, da, mo, yr;          // Byte variables for storing date/time elements
 String sss, mms, hhs, das, mos, yrs;  // String variable for storing date/time text elements
@@ -110,7 +112,7 @@ byte RFIDtagArray[5];                 // Stores the five individual bytes of a t
 const byte checkTime = 30;            // How long in milliseconds to check to see if a tag is present (Tag is only partially read during this time -- This is just a quick way of determining if a tag is present or not. Coil is energized, checks for specific pulse lengths
 const unsigned int pollTime1 = 200;   // How long in milliseconds to try to read a tag if a tag was initially detected (applies to both RF circuits, but that can be changed)
 const unsigned int delayTime = 0;     // Minimim time in seconds between recording the same tag twice in a row (only applies to data logging--other operations are unaffected)
-const unsigned long pauseTime = 100;  // CRITICAL - This determines how long in milliseconds to wait between reading attempts. Make this wait time as long as you can and still maintain functionality (more pauseTime = more power saved)
+const unsigned long pauseTime = 1000;  // CRITICAL - This determines how long in milliseconds to wait between reading attempts. Make this wait time as long as you can and still maintain functionality (more pauseTime = more power saved)
 
 const byte slpH = 22;                            // When to go to sleep at night - hour
 const byte slpM = 00;                            // When to go to sleep at night - minute
@@ -138,7 +140,7 @@ const unsigned int endTime = (wakH + 06 )* 100 + 30; //End time is in minutes. (
  */
 
 unsigned int cycleCount = 0;                     // counts read cycles
-unsigned int stopCycleCount = 200;                // How many read cycles to maintain serial comminications
+unsigned int stopCycleCount = 500;                // How many read cycles to maintain serial comminications
 
 byte SDpresent;                                  // 1 if SD card is detected on startup.
 byte doorState = 1;                              // Status of the motorized door. 0 = open, 1 = closed.
@@ -158,6 +160,7 @@ byte play1stsong[8] = {0x7E,0xFF,0x06,0x0F,0x00,0x01,0x01,0xEF};
 byte playStop[4] = {0x7E,0x02,0x0E,0xEF};
 byte playPaused[4] = {0x7E,0x02,0x02,0xEF};
 byte setVolumeLow[5] = {0x7E,0x03,0x31,0x08,0xEF}; //sets volume to 8
+byte setVolumeMed[5] = {0x7E,0x03,0x31,0x18,0xEF}; //sets volume to 24 - 65dB for external noise, need 60 dB for internal noise
 byte setVolumeHigh[5] = {0x7E,0x03,0x31,0x1E,0xEF}; //sets volume to 30
 byte playReset[5] = {0x7E,0x03,0x35,0x05,0xEF};
 byte playSleep[5] = {0x7E,0x03,0x35,0x03,0xEF};
@@ -172,6 +175,10 @@ int m = 0;
 int p = 0;
 int s = 0;
 int e = 0;
+
+// IR Variables. Variables will change, so setting them to zero for when the board is turned on.
+int sensorState = 0, lastState=0;         // variable for reading the pushbutton status
+
 
 // *******************************SETUP**************************************
 void setup() {                    // This function sets everything up for logging.
@@ -278,7 +285,7 @@ void setup() {                    // This function sets everything up for loggin
     unsigned int serDelay = 0;                    // If there's no response then eventually move on and just start logging
     while (serial.available() == 0 && serDelay < 10000) { // wait about 10 seconds for a user response
       delay(1);                                           // delay 1 ms
-      serDelay++;                                         // add to the delay count
+      ++serDelay;                                         // add to the delay count
     }
     if (serial.available()) {                             // If there is a response then perform the corresponding operation
       incomingByte = serial.read();                       // get the entry from the user
@@ -316,6 +323,7 @@ void setup() {                    // This function sets everything up for loggin
 
   // Prepare for data logging
   RFcircuit = 1;                            // Indicates that the reader should start with the primary RFID circuit
+  RFcircuitCnt = 1;
   serial.println("Scanning for tags...\n"); // message to user
 
 /*
@@ -326,8 +334,14 @@ void setup() {                    // This function sets everything up for loggin
 //  Serial1.write(wakeUpPlay, 5);
 //  delay(500);
   Serial1.write(selectDevice, 5);
-  Serial1.write(setVolumeHigh, 5);
+  Serial1.write(setVolumeMed, 5);
   delay(500);
+
+  ////////IR Sensor Variable Setup////////
+//    pinMode(LEDPIN, OUTPUT);      
+  // initialize the sensor pin as an input:
+  pinMode(irSensor, INPUT);     
+  digitalWrite(irSensor, HIGH); // turn on the pullup
 
 }                                           // end void setup
 
@@ -335,7 +349,6 @@ void setup() {                    // This function sets everything up for loggin
 
 void loop() {  // This is the main function. It loops (repeats) forever.
   if (rtc.updateTime() == false) serial.print("RTC failed at beginning of loop "); // Updates the time variables from RTC
-
     noiseOn();
     noiseOff();
   
@@ -390,9 +403,12 @@ void loop() {  // This is the main function. It loops (repeats) forever.
       }
       tagIDs();
       birdDirection();
+
       flashLED();                             // Flash the LED briefly to indicate a tag read
       if((timeSeconds < pastTimeSeconds + delayTime) & tagNo == tagNo2 & pastCircuit == RFcircuit){ // if everything matches up, the read is a repeat - don't log it.
           serial.println("Repeat read - data not logged.");
+//          }
+      
       } else {
           if(SDpresent == 1){
             serial.println("Logging tag data");
@@ -403,35 +419,46 @@ void loop() {  // This is the main function. It loops (repeats) forever.
           pastTimeSeconds = (rtc.getDate() * 86400) + (rtc.getHours() * 3600) + (rtc.getMinutes() * 60) + rtc.getSeconds();
           tagNo2 = tagNo;                     // set tagNo2 to current tag number for future comparisons // for keeping track of delaytime.
       }
-    }
-  
+    } 
+
   digitalWrite(SHD_PINB, HIGH);        // shut down both RFID readers
   digitalWrite(SHD_PINA, HIGH);        // shut down both RFID readers
 
-  // delay(pauseTime);                 // pause between polling attempts
+//  delay(pauseTime);                 // pause between polling attempts
 
   if(cycleCount < stopCycleCount){
-    cycleCount++;
+    ++cycleCount;
     delay(pauseTime);                  // pause between polling attempts
   } else {
-    int pauseInterval = 10;            //tells the board when to wake up during the pseudosleep mode (serial communication cut off)
-    serial.print("pause interval: ");
-    serial.println(pauseInterval, DEC);
-    rtc.setRptTimer(pauseInterval, 1); // set timer and use frequency of 64 Hz
-    pinMode(SDselect, INPUT);          // make the SD card pin an input so it can serve as interrupt pin
-    rtc.startTimer();                  // start the timer
-    lpSleep();                         // call sleep funciton
-    // blipLED(30);                    // blink indicator - processor reawakened
-    rtc.stopTimer();
-    if(SDpresent == 1){
-      pinMode(SDselect, OUTPUT);       // Chip select pin for SD card must be an output for writing to SD card
-      SD.begin(SDselect);
-    }
+//    byte pauseInterval = (pauseTime*64)/1000;            //tells the board when to wake up during the pseudosleep mode (serial communication cut off)
+//    serial.print("pause interval: ");
+//    serial.println(pauseInterval, DEC);
+//    rtc.setRptTimer(pauseInterval, 1); // set timer and use frequency of 64 Hz
+//    pinMode(SDselect, INPUT);          // make the SD card pin an input so it can serve as interrupt pin
+//    rtc.startTimer();                  // start the timer
+//    lpSleep();                         // call sleep funciton
+//    blipLED(10);                    // blink indicator - processor reawakened
+//    rtc.stopTimer();
+//    if(SDpresent == 1){
+//      pinMode(SDselect, OUTPUT);       // Chip select pin for SD card must be an output for writing to SD card
+//      SD.begin(SDselect);
+//    }
+    delay(pauseTime);  
   }
+    breakBeam();
 
-  if (birdAtbox > 0 || birdAtbox2 > 0 && tagNo>0){ //birdAtbox <= 10 && tagNo>0 switches antennas
-      RFcircuit == 1 ? RFcircuit = 2 : RFcircuit = 1;        // uncomment this line to alternate between active RF circuits. This if statement will switch the RFcircuits from just 1 to alternating between 1 and 2
-      }
+//  if (birdAtbox > 0 || birdAtbox2 > 0 && tagNo>0){ //birdAtbox <= 10 && tagNo>0 switches antennas
+//      RFcircuit == 1 ? RFcircuit = 2 : RFcircuit = 1;        // uncomment this line to alternate between active RF circuits. This if statement will switch the RFcircuits from just 1 to alternating between 1 and 2
+//  }
+
+  //read on circuit 1 four times then read once from circuit 2
+//  if(RFcircuitCnt >= 4) {
+//    RFcircuit = 2;
+//    RFcircuitCnt = 1;
+//  } else {
+//    RFcircuit = 1;
+//    ++RFcircuitCnt;
+//  }
  
 }// end void loop
 
@@ -981,34 +1008,38 @@ void noiseOn(){
         }
         } else if (birdAtbox == 20 && curTime >= startTime && curTime <=endTime){
               Serial1.write(playStop, 4);
-              noiseStatus = noiseState[1];
+//              noiseStatus = noiseState[1];
+//        } else if (RFcircuit == 2 && tagNo ==0 && curTime >= startTime && curTime <=endTime){ 
+//               Serial1.write(playDevice, 4);
         } else if (birdAtbox2 == 20 && curTime >= startTime && curTime <=endTime){
               Serial1.write(playStop, 4);
-              noiseStatus = noiseState[1];
+//              noiseStatus = noiseState[1];
         } else if (birdAtbox == 20 && birdAtbox2 == 20 && curTime >= startTime && curTime <=endTime){
               Serial1.write(playStop, 4);
-              noiseStatus = noiseState[1];              
+//              noiseStatus = noiseState[1];              
           } else if (birdAtbox <= 10 && birdAtbox2 <=10 && curTime >= startTime && curTime < endTime){
+//              Serial1.write(setVolumeMed, 5);            
               Serial1.write(playDevice, 4);
-              noiseStatus = noiseState[0];              
-          
+//              noiseStatus = noiseState[0];              
+          } else if (birdAtbox <= 10 && birdAtbox2 <=10 && curTime >= endTime){
+//              noiseStatus = noiseState[1];              
           }
-
   } //end of noiseOn subroutine
   
 void noiseOff(){
     unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();     
-    if (curTime >= endTime) {
+    if (curTime == endTime) {
       Serial1.write(playStop, 4);
       Serial1.write(playSleep, 5);
+      serial.println("MP3 Player Sleeping");
+      saveLogSD("MP3 Player Sleeping");      
       noiseStatus = noiseState[1];
 
-          e++;
-          if (e == 72000){
-//          serial.println("MP3 Player Sleeping");
-          saveLogSD("MP3 Player Sleeping");
-          e = 0;
-          }
+//          e++;
+//          if (e == 72000){
+//
+//          e = 0;
+//          }
 //      saveLogSD("Speaker Sleeping");
 //      serial.println("Speaker Sleeping");
 //     } else if (birdIn == 0 && (hh*60)+mm >= endTime) {
@@ -1026,62 +1057,172 @@ void tagIDs(){
     birdID[2] = RFIDtagNumber;
   }
 }
+
+void breakBeam(){
+    sensorState = digitalRead(irSensor);
+    // check if the sensor beam is broken
+  // if it is, the sensorState is LOW:
+//  if (sensorState == LOW) {     
+//    // turn LED on:
+//    digitalWrite(LEDPIN, HIGH);  
+//  } 
+//  else {
+//    // turn LED off:
+//    digitalWrite(LEDPIN, LOW); 
+//  }
+  
+  if (sensorState && !lastState) {
+    serial.println("Unbroken");
+    serial.println(birdAtbox);
+  } else if (sensorState == 0 && lastState == 1) {
+    flashLED();                             // Flash the LED briefly to indicate a tag read
+    serial.println("Broken");
+    birdAtbox = 20;
+    serial.println("Bird 1 is in box");
+    serial.println(birdAtbox);
+    noiseStatus = noiseState[1];
+  }
+  lastState = sensorState;
+}
 void birdDirection(){
-        if (tagNo > 0 && birdAtbox == 0 && RFcircuit == 1 && RFIDtagNumber == birdID[0]){
-//        birdID[0] = RFIDtagNumber;
+      unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();     
+        if (tagNo > 0 && birdAtbox == 0 && RFcircuit == 1 && RFIDtagNumber == birdID[0] && curTime >= startTime && curTime <= endTime){
         birdAtbox = 10;
         serial.println("Bird 1 at box is ");
         serial.println(birdAtbox);
         serial.print(birdID[0]);
-        } else if (RFcircuit == 1 && birdAtbox <= 10 && RFIDtagNumber == birdID[0]){
+        noiseStatus = noiseState[0];
+        } else if (RFcircuit == 1 && birdAtbox <= 10 && RFIDtagNumber == birdID[0] && curTime >= startTime && curTime <= endTime){
             birdAtbox = birdAtbox-1;
             serial.println("Bird 1 is at box entrance");
             serial.print("Bird 1 at box is ");
             serial.println(birdAtbox);
-            saveLogSD("Noise playing");
-              } else if (RFcircuit == 2 && 0 < birdAtbox <= 10 && RFIDtagNumber == birdID[0]){
-                birdAtbox = 20;
-                serial.println("Bird 1 is in box");
-                serial.print("Bird 1 at box is ");
-                serial.println(birdAtbox);
-                } else if (RFcircuit == 1 && birdAtbox == 20 && RFIDtagNumber == birdID[0]){
+            noiseStatus = noiseState[0];
+//            saveLogSD("Noise playing");
+//              } else if (sensorState == 0 && lastState == 1 &&  0 < birdAtbox <= 10 && curTime >= startTime && curTime <= endTime){
+//                flashLED();                             // Flash the LED briefly to indicate a tag read
+//                birdAtbox = 20;
+//                serial.println("Bird 1 is in box");
+//                serial.print("Bird 1 at box is ");
+//                noiseStatus = noiseState[1];
+//                serial.println(birdAtbox);
+                } else if (RFcircuit == 1 && birdAtbox > 10 && curTime >= startTime && curTime <= endTime){
                   birdAtbox = 0;
                   RFcircuit = 1;
                   serial.println("Bird 1 has left box");
                   serial.print("Bird 1 at box is ");
                   serial.println(birdAtbox);
-                    } else if (RFcircuit == 1 && birdAtbox2 == 0 && RFIDtagNumber == birdID[1]){
+                  noiseStatus = noiseState[0];
+
+                    } else if (RFcircuit == 1 && birdAtbox2 == 0 && RFIDtagNumber == birdID[1] && curTime >= startTime && curTime <= endTime){
 //                      birdID[1] = RFIDstring;
                       serial.println("New bird is at box entrance!");
                       birdAtbox2 = 10;
                       serial.print("Bird 2 at box is ");
                       serial.println(birdAtbox2);
-                      } else if (RFcircuit == 1 && birdAtbox2 <= 10 && RFIDtagNumber == birdID[1]){
+                      noiseStatus = noiseState[0];
+                      
+                      } else if (RFcircuit == 1 && birdAtbox2 <= 10 && RFIDtagNumber == birdID[1] && curTime >= startTime && curTime <= endTime){
                         birdAtbox2 = birdAtbox2-1;
                         serial.println("Bird 2 is still at box entrance");
                         serial.print("Bird 2 at box is ");
                         serial.println(birdAtbox2);
-                      } else if (RFcircuit == 2 && 0 < birdAtbox2 <= 10 && RFIDtagNumber == birdID[1]){
+                                noiseStatus = noiseState[0];
+
+                      } else if (RFcircuit == 2 && 0 < birdAtbox2 <= 10 && RFIDtagNumber == birdID[1] && curTime >= startTime && curTime <= endTime){
                         birdAtbox2 = 20;
                         serial.println("Bird 2 is in box");
                         serial.print("Bird 2 at box is ");
                         serial.println(birdAtbox2);
-                      } else if (RFcircuit == 1 && birdAtbox2 == 20 && RFIDtagNumber == birdID[1]){
+                        noiseStatus = noiseState[1];
+                      
+                      } else if (RFcircuit == 1 && birdAtbox2 == 20 && RFIDtagNumber == birdID[1] && curTime >= startTime && curTime <= endTime){
                         birdAtbox2 = 0;
                         RFcircuit = 1;
                         serial.println("Second bird has left box");
                         serial.print("Bird 2 at box is ");
-                        serial.println(birdAtbox2);    
-                          } else if (RFcircuit == 1 && RFIDtagNumber == birdID[2]){
+                        serial.println(birdAtbox2); 
+                                noiseStatus = noiseState[0];
+   
+                          } else if (RFcircuit == 1 && RFIDtagNumber == birdID[2] && curTime >= startTime && curTime <= endTime){
 //                            birdID[2] = RFIDtagNumber;
                             serial.println("Unknown bird at box entrance");
-                          } else if (RFcircuit == 2 && RFIDtagNumber == birdID[2]){
+                                    noiseStatus = noiseState[0];
+
+                          } else if (RFcircuit == 2 && RFIDtagNumber == birdID[2] && curTime >= startTime && curTime <= endTime){
                             serial.println("Unknown bird in box");
+                                    noiseStatus = noiseState[0];
+
 //                          } else if (RFcircuit == 1 && RFIDstring != birdID[0] && RFIDstring != birdID[1] && RFIDstring != birdID[2] && RFIDstring != birdID[4]){
 //                            birdID[3] = RFIDstring;
 //                            serial.println("Unknown bird 2 at box");
 //                          } else if (RFcircuit == 1 && RFIDstring != birdID[0] && RFIDstring != birdID[1] && RFIDstring != birdID[2] && RFIDstring != birdID[3]){
 //                            birdID[4] = RFIDstring;
 //                            serial.println("Unknown bird 2 at box");
-                          }                            
-}
+                                        } else if (tagNo > 0 && birdAtbox == 0 && RFcircuit == 1 && RFIDtagNumber == birdID[0] && curTime >= endTime){
+                                            birdAtbox = 10;
+                                            serial.println("Bird 1 at box is ");
+                                            serial.println(birdAtbox);
+                                            serial.print(birdID[0]);
+                                            noiseStatus = noiseState[1];
+                                        } else if (RFcircuit == 1 && birdAtbox <= 10 && RFIDtagNumber == birdID[0] && curTime >= endTime){
+                                            birdAtbox = birdAtbox-1;
+                                            serial.println("Bird 1 is at box entrance");
+                                            serial.print("Bird 1 at box is ");
+                                            serial.println(birdAtbox);
+                                            noiseStatus = noiseState[1];
+                                //            saveLogSD("Noise playing");
+                                        } else if (RFcircuit == 2 && 0 < birdAtbox <= 10 && RFIDtagNumber == birdID[0] && curTime >= endTime){
+                                          birdAtbox = 20;
+                                          serial.println("Bird 1 is in box");
+                                          serial.print("Bird 1 at box is ");
+                                          noiseStatus = noiseState[1];
+                                          serial.println(birdAtbox);
+                                        } else if (RFcircuit == 1 && birdAtbox == 20 && RFIDtagNumber == birdID[0] && curTime >= endTime){
+                                          birdAtbox = 0;
+                                          RFcircuit = 1;
+                                          serial.println("Bird 1 has left box");
+                                          serial.print("Bird 1 at box is ");
+                                          serial.println(birdAtbox);
+                                          noiseStatus = noiseState[1];
+                                        } else if (RFcircuit == 1 && birdAtbox2 == 0 && RFIDtagNumber == birdID[1] && curTime >= endTime){
+                    //                      birdID[1] = RFIDstring;
+                                          serial.println("New bird is at box entrance!");
+                                          birdAtbox2 = 10;
+                                          serial.print("Bird 2 at box is ");
+                                          serial.println(birdAtbox2);
+                                          noiseStatus = noiseState[1];
+                                        } else if (RFcircuit == 1 && birdAtbox2 <= 10 && RFIDtagNumber == birdID[1] && curTime >= endTime){
+                                          birdAtbox2 = birdAtbox2-1;
+                                          serial.println("Bird 2 is still at box entrance");
+                                          serial.print("Bird 2 at box is ");
+                                          serial.println(birdAtbox2);
+                                          noiseStatus = noiseState[1];
+                                        } else if (RFcircuit == 2 && 0 < birdAtbox2 <= 10 && RFIDtagNumber == birdID[1] && curTime >= endTime){
+                                          birdAtbox2 = 20;
+                                          serial.println("Bird 2 is in box");
+                                          serial.print("Bird 2 at box is ");
+                                          serial.println(birdAtbox2);
+                                          noiseStatus = noiseState[1];
+                                        } else if (RFcircuit == 1 && birdAtbox2 == 20 && RFIDtagNumber == birdID[1] && curTime >= endTime){
+                                          birdAtbox2 = 0;
+                                          RFcircuit = 1;
+                                          serial.println("Second bird has left box");
+                                          serial.print("Bird 2 at box is ");
+                                          serial.println(birdAtbox2); 
+                                          noiseStatus = noiseState[1];
+                                        } else if (RFcircuit == 1 && RFIDtagNumber == birdID[2] && curTime >= startTime && curTime <= endTime){
+                  //                            birdID[2] = RFIDtagNumber;
+                                          serial.println("Unknown bird at box entrance");
+                                          noiseStatus = noiseState[1];
+                                        } else if (RFcircuit == 2 && RFIDtagNumber == birdID[2] && curTime >= startTime && curTime <= endTime){
+                                          serial.println("Unknown bird in box");
+                                          noiseStatus = noiseState[1];
+                                        }
+                  //                          } else if (RFcircuit == 1 && RFIDstring != birdID[0] && RFIDstring != birdID[1] && RFIDstring != birdID[2] && RFIDstring != birdID[4]){
+                  //                            birdID[3] = RFIDstring;
+                  //                            serial.println("Unknown bird 2 at box");
+                  //                          } else if (RFcircuit == 1 && RFIDstring != birdID[0] && RFIDstring != birdID[1] && RFIDstring != birdID[2] && RFIDstring != birdID[3]){
+                  //                            birdID[4] = RFIDstring;
+                  //                            serial.println("Unknown bird 2 at box");                           
+} //end of birdDirection subroutine
