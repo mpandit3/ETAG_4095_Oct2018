@@ -1071,16 +1071,29 @@ void breakBeam(){
 //    digitalWrite(LEDPIN, LOW); 
 //  }
   
-  if (sensorState && !lastState) {
+  if (sensorState == 1 && lastState == 0) {
     serial.println("Unbroken");
     serial.println(birdAtbox);
-  } else if (sensorState == 0 && lastState == 1) {
+  } else if (sensorState == 0 && lastState == 1 && birdAtbox <=10) {
     flashLED();                             // Flash the LED briefly to indicate a tag read
     serial.println("Broken");
     birdAtbox = 20;
     serial.println("Bird 1 is in box");
     serial.println(birdAtbox);
     noiseStatus = noiseState[1];
+//  }
+//  lastState = sensorState;
+//  if (sensorState == 1 && lastState == 0 && birdAtbox == 20){
+//    birdAtbox = 20;    
+//    serial.println("Unbroken");
+//    serial.println(birdAtbox); 
+  } else if (sensorState == 0 && lastState == 1 && birdAtbox == 20){
+    flashLED();                             // Flash the LED briefly to indicate a tag read
+    serial.println("Broken");
+    birdAtbox = 10;
+    serial.println("Bird 1 is leaving box");
+    serial.println(birdAtbox);
+    noiseStatus = noiseState[0];    
   }
   lastState = sensorState;
 }
@@ -1106,6 +1119,13 @@ void birdDirection(){
 //                serial.print("Bird 1 at box is ");
 //                noiseStatus = noiseState[1];
 //                serial.println(birdAtbox);
+//        } else if (birdAtbox == 15 && curTime >= startTime && curTime <= endTime){
+//                  birdAtbox = 0;
+//                  RFcircuit = 1;
+//                  serial.println("Bird 1 is leaving box");
+//                  serial.print("Bird 1 at box is ");
+//                  serial.println(birdAtbox);
+//                  noiseStatus = noiseState[0];
                 } else if (RFcircuit == 1 && birdAtbox > 10 && curTime >= startTime && curTime <= endTime){
                   birdAtbox = 0;
                   RFcircuit = 1;
