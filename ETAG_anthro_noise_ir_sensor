@@ -168,7 +168,7 @@ byte wakeUpPlay[5] = {0x7E,0x03,0x35,0x02,0xEF};
 unsigned int play = 0;
 unsigned int birdIn = 0;
 
-//Speaker Counting variables
+//MP3 Player and Speaker Variables
 String noiseState[]{"Noise On", "Noise Off"};
 String noiseStatus;
 int m = 0;
@@ -1017,7 +1017,7 @@ void noiseOn(){
         } else if (birdAtbox == 20 && birdAtbox2 == 20 && curTime >= startTime && curTime <=endTime){
               Serial1.write(playStop, 4);
 //              noiseStatus = noiseState[1];              
-          } else if (birdAtbox <= 10 && birdAtbox2 <=10 && curTime >= startTime && curTime < endTime){
+          } else if (birdAtbox <= 15 && birdAtbox2 <=15 && curTime >= startTime && curTime < endTime){
 //              Serial1.write(setVolumeMed, 5);            
               Serial1.write(playDevice, 4);
 //              noiseStatus = noiseState[0];              
@@ -1070,32 +1070,31 @@ void breakBeam(){
 //    // turn LED off:
 //    digitalWrite(LEDPIN, LOW); 
 //  }
-  
   if (sensorState == 1 && lastState == 0) {
     serial.println("Unbroken");
     serial.println(birdAtbox);
-  } else if (sensorState == 0 && lastState == 1 && birdAtbox <=10) {
-    flashLED();                             // Flash the LED briefly to indicate a tag read
-    serial.println("Broken");
-    birdAtbox = 20;
-    serial.println("Bird 1 is in box");
-    serial.println(birdAtbox);
-    noiseStatus = noiseState[1];
+    } else if (sensorState == 0 && lastState == 1 && birdAtbox <=10) {
+      flashLED();                             // Flash the LED briefly to indicate a tag read
+      serial.println("Broken");
+      birdAtbox = 20;
+      serial.println("Bird 1 is in box");
+      serial.println(birdAtbox);
+      noiseStatus = noiseState[1];
 //  }
 //  lastState = sensorState;
 //  if (sensorState == 1 && lastState == 0 && birdAtbox == 20){
 //    birdAtbox = 20;    
 //    serial.println("Unbroken");
 //    serial.println(birdAtbox); 
-  } else if (sensorState == 0 && lastState == 1 && birdAtbox == 20){
-    flashLED();                             // Flash the LED briefly to indicate a tag read
-    serial.println("Broken");
-    birdAtbox = 10;
-    serial.println("Bird 1 is leaving box");
-    serial.println(birdAtbox);
-    noiseStatus = noiseState[0];    
-  }
-  lastState = sensorState;
+      } else if (sensorState == 0 && lastState == 1 && birdAtbox == 20){
+        flashLED();                             // Flash the LED briefly to indicate a tag read
+        serial.println("Broken");
+        birdAtbox = 15;
+        serial.println("Bird 1 is leaving box");
+        serial.println(birdAtbox);
+        noiseStatus = noiseState[0];    
+      }
+      lastState = sensorState;
 }
 void birdDirection(){
       unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();     
